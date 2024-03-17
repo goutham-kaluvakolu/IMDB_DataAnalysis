@@ -1,0 +1,179 @@
+=====> Query 1.
+
+=====> Eng_query: 
+
+The average of the ratings (rounded to 4 decimal places) for the movies
+by genre for each year from 2017 to 2021 for each genre, Adventure, and Thriller.
+Should have 10 rows of output, for 5 years and 2 genres.
+
+Context: Here the focus is on the aggregation for
+each year and for each of the listed genres. For example, for output record
+corresponding to the average rating of Adventure movies in 2017, we need to
+consider all movies (with startyear as 2017) for which Adventure is one of the
+associated genres. That is, movies with "Action,Adventure", "Adventure",
+"Adventure,Thriller" and so on qualify for this requirement.
+
+=====> SQL QUERY:
+
+select t_basics.startyear as YEAR,
+CASE
+  WHEN t_basics.GENRES LIKE '%Adventure%' THEN 'Adventure'
+  WHEN t_basics.GENRES LIKE '%Thriller%' THEN 'Thriller'
+END AS GENRES ,Round(avg(t_ratings.averagerating),4) as YEARLY_AVG
+from imdb00.title_basics t_basics , imdb00.title_ratings t_ratings
+where t_basics.tconst=t_ratings.tconst and t_ratings.tconst in
+ (select tconst
+ from imdb00.title_basics t_basics
+ where (t_basics.GENRES LIKE '%Adventure%' OR t_basics.genres like '%Thriller%')
+ and t_basics.titletype like 'movie'
+ and t_basics.startyear between '2017' and '2021'
+ )
+group by
+( t_basics.startyear,
+ CASE
+  WHEN t_basics.GENRES LIKE '%Adventure%' THEN 'Adventure'
+  WHEN t_basics.GENRES LIKE '%Thriller%' THEN 'Thriller'
+ END)
+order by t_basics.startyear;
+
+
+======> Result:
+
+YEAR 	GENRES 	YEARLY_AVG
+---------- --------- ----------
+2017	Adventure	5.8838
+2017	Thriller	5.3668
+2018	Adventure	5.8971
+2018	Thriller	5.3953
+2019	Adventure	5.9197
+2019	Thriller	5.3765
+2020	Adventure	5.8644
+2020	Thriller	5.2422
+2021	Adventure	6.0423
+2021	Thriller	5.623
+
+*************************************************************************************************************************
+
+=====> Query 2
+
+=====> Eng-query:
+
+For each year from 2004 to 2018 and for the Drama and Romance genre
+combination, find out the lead actor/actress names with the highest average
+rating. In case, there are multiple actors/actresses with the same highest average
+rating, we need to display all of them.
+
+Context:
+1. The average rating for an actor/actress is defined by the average rating of
+the movies in which he/she has acted in.
+2. Here,while calculating each actor’s/actress’ average rating. For
+example, for the output record corresponding to Drama,Romance in 2004,
+we need to ONLY consider those movies for every actor that have
+• startyear as 2004,
+• Drama and Romance as at least two of the associated genres, (that is
+"Drama,Romance", "Comedy,Drama,Romance",
+"Drama,Fantasy,Romance", and so on qualify the requirement), and
+• have received at least 80000 votes.
+3. Moreover, for this query we need to only consider lead actors/actresses
+(someone is a lead actor/actress if the ordering attribute of the
+TITLE_PRINCIPALS table is equal to 1 or 2).
+
+=====> SQL-Query:
+
+SELECT 
+    sub1.STARTYEAR AS YEAR, 
+    sub1.GENRE, 
+    sub1.AVGR AS HIGHEST_AVG_ACTORRATING, 
+    sub1.PRIMARYNAME AS Most_Popular_Actor
+FROM (
+    SELECT 
+        t_basics.STARTYEAR, 
+        AVG(t_ratings.AVERAGERATING) AS AVGR, 
+        Name_b.PRIMARYNAME,
+        CASE
+            WHEN t_basics.GENRES LIKE '%Drama%' AND t_basics.GENRES LIKE '%Romance%' THEN 'Drama,Romance'
+        END AS GENRE
+    FROM imdb00.TITLE_BASICS t_basics 
+    INNER JOIN imdb00.TITLE_RATINGS t_ratings ON t_basics.TCONST = t_ratings.TCONST
+    INNER JOIN imdb00.TITLE_PRINCIPALS t_principals ON t_basics.TCONST = t_principals.TCONST 
+    INNER JOIN imdb00.NAME_BASICS Name_b ON t_principals.NCONST = Name_b.NCONST
+    WHERE t_basics.TITLETYPE LIKE 'movie'
+        AND t_basics.GENRES LIKE '%Drama%'
+        AND t_basics.GENRES LIKE '%Romance%'
+        AND t_basics.STARTYEAR >= '2004'
+        AND t_basics.STARTYEAR <= '2018'
+        AND t_ratings.NUMVOTES >= 80000
+        AND t_principals.ORDERING <= 2
+        AND (t_principals.CATEGORY='actor' OR t_principals.CATEGORY='actress')
+    GROUP BY t_basics.STARTYEAR, Name_b.PRIMARYNAME, 
+        CASE WHEN t_basics.GENRES LIKE '%Drama%' AND t_basics.GENRES LIKE '%Romance%' THEN 'Drama,Romance' END
+) sub1
+INNER JOIN (
+    SELECT 
+        MAX(AVGR) AS AVGR, 
+        STARTYEAR
+    FROM (
+        SELECT 
+            t_basics.STARTYEAR, 
+            AVG(t_ratings.AVERAGERATING) AS AVGR, 
+            Name_b.PRIMARYNAME,
+            CASE
+                WHEN t_basics.GENRES LIKE '%Drama%' AND t_basics.GENRES LIKE '%Romance%' THEN 'Drama,Romance'
+            END AS GENRE
+        FROM imdb00.TITLE_BASICS t_basics 
+        INNER JOIN imdb00.TITLE_RATINGS t_ratings ON t_basics.TCONST = t_ratings.TCONST
+        INNER JOIN imdb00.TITLE_PRINCIPALS t_principals ON t_basics.TCONST = t_principals.TCONST 
+        INNER JOIN imdb00.NAME_BASICS Name_b ON t_principals.NCONST = Name_b.NCONST
+        WHERE t_basics.TITLETYPE LIKE 'movie'
+            AND t_basics.GENRES LIKE '%Drama%'
+            AND t_basics.GENRES LIKE '%Romance%'
+            AND t_basics.STARTYEAR >= '2004'
+            AND t_basics.STARTYEAR <= '2018'
+            AND t_ratings.NUMVOTES >= 80000
+            AND t_principals.ORDERING <= 2
+            AND (t_principals.CATEGORY='actor' OR t_principals.CATEGORY='actress')
+        GROUP BY t_basics.STARTYEAR, Name_b.PRIMARYNAME, 
+            CASE WHEN t_basics.GENRES LIKE '%Drama%' AND t_basics.GENRES LIKE '%Romance%' THEN 'Drama,Romance' END
+    )
+    GROUP BY STARTYEAR
+) sub2 ON sub1.AVGR = sub2.AVGR AND sub1.STARTYEAR = sub2.STARTYEAR
+ORDER BY YEAR, HIGHEST_AVG_ACTORRATING DESC;
+
+=====> Result:
+
+YEAR GENRE HIGHEST_AVG_ACTOR_RATING MOST_POPULAR_ACTOR
+---------- ------------- ----------------------- -------------------
+2004	Drama,Romance	8.3	Kate Winslet
+2004	Drama,Romance	8.3	Jim Carrey
+2005	Drama,Romance	8	Russell Crowe
+2005	Drama,Romance	8	Renée Zellweger
+2006	Drama,Romance	7.5	Kate Winslet
+2006	Drama,Romance	7.5	Jennifer Connelly
+2007	Drama,Romance	7.8	Glen Hansard
+2007	Drama,Romance	7.8	Markéta Irglová
+2007	Drama,Romance	7.8	James McAvoy
+2007	Drama,Romance	7.8	Keira Knightley
+2008	Drama,Romance	8	Freida Pinto
+2008	Drama,Romance	8	Dev Patel
+2009	Drama,Romance	8.2	Ricardo Darín
+2009	Drama,Romance	8.2	Soledad Villamil
+2010	Drama,Romance	7.9	Kajol
+2010	Drama,Romance	7.9	Shah Rukh Khan
+2011	Drama,Romance	7.9	Bérénice Bejo
+2011	Drama,Romance	7.9	Jean Dujardin
+2012	Drama,Romance	8.1	Ranbir Kapoor
+2012	Drama,Romance	8.1	Priyanka Chopra Jonas
+2013	Drama,Romance	8	Joaquin Phoenix
+2013	Drama,Romance	8	Amy Adams
+2014	Drama,Romance	7.7	Felicity Jones
+2014	Drama,Romance	7.7	Ansel Elgort
+2014	Drama,Romance	7.7	Shailene Woodley
+2014	Drama,Romance	7.7	Eddie Redmayne
+2015	Drama,Romance	7.5	Saoirse Ronan
+2015	Drama,Romance	7.5	Emory Cohen
+2016	Drama,Romance	8.1	Ha Jung-woo
+2016	Drama,Romance	8.1	Kim Min-hee
+2017	Drama,Romance	7.8	Timothée Chalamet
+2017	Drama,Romance	7.8	Armie Hammer
+2018	Drama,Romance	7.6	Bradley Cooper
+2018	Drama,Romance	7.6	Lady Gaga
